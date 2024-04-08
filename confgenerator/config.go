@@ -49,6 +49,20 @@ type RunMonitoringSpec struct {
 	TargetLabels RunTargetLabels `yaml:"targetLabels,omitempty"`
 	// Limits to apply at scrape time.
 	Limits *ScrapeLimits `yaml:"limits,omitempty"`
+	// The configuration for the OpenTelemetry receiver.
+	Receivers OTelReceiversConfig `yaml:"receivers,omitempty"`
+}
+
+type OTelReceiversConfig struct {
+	Prometheus PrometheusConfig `yaml:"prometheus,omitempty"`
+}
+
+type PrometheusConfig struct {
+	PreserveUntyped               bool   `yaml:"preserve_untyped"`
+	UseStartTimeMetric            bool   `yaml:"use_start_time_metric"`
+	StartMetricRegex              string `yaml:"start_time_metric_regex"`
+	UseCollectorStartTimeFallback bool   `yaml:"use_collector_start_time_fallback"`
+	AllowCumulativeResets         bool   `yaml:"allow_cumulative_resets"`
 }
 
 // RunTargetLabels specifies the additional metadata about the target
@@ -153,6 +167,15 @@ func DefaultRunMonitoringConfig() *RunMonitoringConfig {
 				},
 			},
 			TargetLabels: RunTargetLabels{Metadata: &allowedTargetMetadata},
+			Receivers: OTelReceiversConfig{
+				Prometheus: PrometheusConfig{
+					PreserveUntyped:               true,
+					UseStartTimeMetric:            true,
+					StartMetricRegex:              "",
+					UseCollectorStartTimeFallback: true,
+					AllowCumulativeResets:         true,
+				},
+			},
 		},
 		nil,
 	}
@@ -217,14 +240,18 @@ func (rc *RunMonitoringConfig) OTelReceiverPipeline() (*otel.ReceiverPipeline, e
 	// Group by the GMP attributes.
 	processors = append(processors, otel.GroupByGMPAttrs())
 
+	// Prometheus config.
+	promConfig := rc.Spec.Receivers.Prometheus
+
 	return &otel.ReceiverPipeline{
 		Receiver: otel.Component{
 			Type: "prometheus",
 			Config: map[string]interface{}{
-				"preserve_untyped":                  true,
-				"use_start_time_metric":             true,
-				"use_collector_start_time_fallback": true,
-				"allow_cumulative_resets":           true,
+				"preserve_untyped":                  promConfig.PreserveUntyped,
+				"use_start_time_metric":             promConfig.UseStartTimeMetric,
+				"start_time_metric_regex":           promConfig.StartMetricRegex,
+				"use_collector_start_time_fallback": promConfig.UseCollectorStartTimeFallback,
+				"allow_cumulative_resets":           promConfig.AllowCumulativeResets,
 				"config": map[string]interface{}{
 					"scrape_configs": scrapeConfig,
 				},
